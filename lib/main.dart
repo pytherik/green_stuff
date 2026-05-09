@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:green_stuff/recognition_model.dart';
+import 'package:green_stuff/widgets/preview_images.dart';
 import 'package:green_stuff/widgets/styled_snack_bar.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
@@ -64,74 +64,19 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Widget _previewImages() {
-    final Text? retrieveError = _getRetrieveErrorWidget();
-    if (retrieveError != null) {
-      return retrieveError;
-    }
-    if (_imageFile != null) {
-      return Scaffold(
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Image.file(
-                  File(_imageFile!.path),
-                  errorBuilder:
-                      (
-                        BuildContext context,
-                        Object error,
-                        StackTrace? stackTrace,
-                      ) {
-                        return const Center(
-                          child: Text('Dieser Bildtyp wird nicht unterstützt.'),
-                        );
-                      },
-                ),
-                if (_scientificNameWithoutAuthor != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('$_scientificNameWithoutAuthor'),
-                        if (_scientificNameAuthorship != null)
-                          Text('($_scientificNameAuthorship)'),
-                      ],
-                    ),
-                  ),
-                if (_commonNamesList.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Trivialnamen: ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),),
-                        ..._commonNamesList.map(
-                          (name) => Text(name ?? ''),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      );
-    } else if (_pickImageError != null) {
-      return Text(
-        'Pick image error: $_pickImageError',
-        textAlign: TextAlign.center,
-      );
-    } else {
-      return const Text(
-        'Wähle ein Bild oder mache ein Foto.',
-        textAlign: TextAlign.center,
-      );
-    }
+  Widget _buildPreviewWidget() {final String? error = _retrieveDataError;
+  if (error != null) {
+    _retrieveDataError = null; // Fehler nach dem Auslesen zurücksetzen
+  }
+
+  return PreviewImages(
+    imageFile: _imageFile,
+    scientificNameWithoutAuthor: _scientificNameWithoutAuthor,
+    scientificNameAuthorship: _scientificNameAuthorship,
+    commonNamesList: _commonNamesList,
+    pickImageError: _pickImageError,
+    retrieveDataError: error,
+  );
   }
 
   Future<void> retrieveLostData() async {
@@ -212,37 +157,35 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.title!)),
-      body: Center(
-        child: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-            ? FutureBuilder<void>(
-                future: retrieveLostData(),
-                builder: (BuildContext context, AsyncSnapshot<void> snapshot) {
-                  switch (snapshot.connectionState) {
-                    case ConnectionState.none:
-                    case ConnectionState.waiting:
+      body: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? FutureBuilder<void>(
+              future: retrieveLostData(),
+              builder: (BuildContext context, AsyncSnapshot<void> snapshot) {
+                switch (snapshot.connectionState) {
+                  case ConnectionState.none:
+                  case ConnectionState.waiting:
+                    return const Text(
+                      'You have not yet picked an image.',
+                      textAlign: TextAlign.center,
+                    );
+                  case ConnectionState.done:
+                    return _buildPreviewWidget();
+                  case ConnectionState.active:
+                    if (snapshot.hasError) {
+                      return Text(
+                        'Pick image error: ${snapshot.error}}',
+                        textAlign: TextAlign.center,
+                      );
+                    } else {
                       return const Text(
                         'You have not yet picked an image.',
                         textAlign: TextAlign.center,
                       );
-                    case ConnectionState.done:
-                      return _previewImages();
-                    case ConnectionState.active:
-                      if (snapshot.hasError) {
-                        return Text(
-                          'Pick image error: ${snapshot.error}}',
-                          textAlign: TextAlign.center,
-                        );
-                      } else {
-                        return const Text(
-                          'You have not yet picked an image.',
-                          textAlign: TextAlign.center,
-                        );
-                      }
-                  }
-                },
-              )
-            : _previewImages(),
-      ),
+                    }
+                }
+              },
+            )
+          : _buildPreviewWidget(),
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: <Widget>[
@@ -300,14 +243,5 @@ class _MyHomePageState extends State<MyHomePage> {
         ],
       ),
     );
-  }
-
-  Text? _getRetrieveErrorWidget() {
-    if (_retrieveDataError != null) {
-      final Text result = Text(_retrieveDataError!);
-      _retrieveDataError = null;
-      return result;
-    }
-    return null;
   }
 }
