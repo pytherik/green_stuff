@@ -8,7 +8,7 @@ class PreviewImages extends StatelessWidget {
   final String? scientificNameAuthorship;
   final List<String?> commonNamesList;
   final dynamic pickImageError;
-  final String? retrieveDataError;
+  final bool isCameraSupported;
 
   const PreviewImages({
     super.key,
@@ -17,20 +17,11 @@ class PreviewImages extends StatelessWidget {
     this.scientificNameAuthorship,
     required this.commonNamesList,
     this.pickImageError,
-    this.retrieveDataError,
+    required this.isCameraSupported,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Fehler beim Wiederherstellen verlorener Daten (Android)
-    if (retrieveDataError != null) {
-      return Text(
-        retrieveDataError!,
-        textAlign: TextAlign.center,
-      );
-    }
-
-    // Wenn ein Bild vorhanden ist, zeige die Details an
     if (imageFile != null) {
       return SingleChildScrollView(
         child: Padding(
@@ -41,7 +32,7 @@ class PreviewImages extends StatelessWidget {
               Image.file(
                 File(imageFile!.path),
                 width: double.infinity,
-                height: 300,
+                height: 200,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return const Center(
@@ -55,9 +46,7 @@ class PreviewImages extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        scientificNameWithoutAuthor!,
-                      ),
+                      Text(scientificNameWithoutAuthor!),
                       if (scientificNameAuthorship != null)
                         Text('($scientificNameAuthorship)'),
                     ],
@@ -76,8 +65,7 @@ class PreviewImages extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      ...commonNamesList
-                          .map((name) => Text(name!)),
+                      ...commonNamesList.map((name) => Text(name!)),
                     ],
                   ),
                 ),
@@ -87,19 +75,44 @@ class PreviewImages extends StatelessWidget {
       );
     }
 
-    // Fehler beim Auswählen des Bildes
     if (pickImageError != null) {
       return Text(
-        'Pick image error: $pickImageError',
+        'Bildauswahl Fehler: $pickImageError',
         textAlign: TextAlign.center,
       );
     }
 
-    // Standardanzeige, wenn nichts ausgewählt wurde
     return Center(
-      child: const Text(
-        'Wähle ein Bild oder mache ein Foto.',
-        textAlign: TextAlign.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Image.asset(
+            'assets/images/app_icon.png',
+            width: double.infinity,
+            height: 300,
+          ),
+          SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text.rich(
+              style: TextStyle(fontSize: 18),
+              textAlign: TextAlign.center,
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text:
+                        'Wähle eine Pflanze aus der Bildergalerie deines Telefons.',
+                  ),
+                  if (isCameraSupported)
+                    TextSpan(
+                      text: ' Du kannst auch ein Foto machen aber beachte: das Bild wird nicht gespeichert.'
+                    )
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

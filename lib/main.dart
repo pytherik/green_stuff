@@ -1,50 +1,52 @@
 import 'dart:async';
-import 'dart:convert';
-import 'package:green_stuff/recognition_model.dart';
+import 'dart:io';
+import 'package:green_stuff/plant_recognition.service.dart';
+import 'package:green_stuff/widgets/custom_fab.dart';
 import 'package:green_stuff/widgets/preview_images.dart';
 import 'package:green_stuff/widgets/styled_snack_bar.dart';
-import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const GreenStuff());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class GreenStuff extends StatelessWidget {
+  const GreenStuff({super.key});
 
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
       title: 'Green Stuff',
-      home: MyHomePage(title: 'Green Stuff'),
+      debugShowCheckedModeBanner: false,
+      home: ImageSelectPage(title: 'Green Stuff'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, this.title});
+class ImageSelectPage extends StatefulWidget {
+  const ImageSelectPage({super.key, this.title});
 
   final String? title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<ImageSelectPage> createState() => _ImageSelectPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  static const String _plantNetUrl = String.fromEnvironment('PLANTNET_URL');
+class _ImageSelectPageState extends State<ImageSelectPage> {
+  final apiKey = const String.fromEnvironment('API_KEY');
+  late final url = 'https://my-api.plantnet.org/v2/identify/all?api-key=$apiKey&lang=de';
+  late final PlantRecognitionService _recognitionService = PlantRecognitionService(url);
+  final ImagePicker _picker = ImagePicker();
   XFile? _imageFile;
-  String? _scientificNameWithoutAuthor;
-  String? _scientificNameAuthorship;
+  String? _scientificName;
+  String? _authorship;
   final List<String?> _commonNamesList = [];
 
   dynamic _pickImageError;
-
   String? _retrieveDataError;
 
-  final ImagePicker _picker = ImagePicker();
+  bool isPending = false;
 
   Future<void> _onImageButtonPressed(
     ImageSource source, {
@@ -64,182 +66,160 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Widget _buildPreviewWidget() {final String? error = _retrieveDataError;
-  if (error != null) {
-    _retrieveDataError = null; // Fehler nach dem Auslesen zurücksetzen
-  }
-
-  return PreviewImages(
-    imageFile: _imageFile,
-    scientificNameWithoutAuthor: _scientificNameWithoutAuthor,
-    scientificNameAuthorship: _scientificNameAuthorship,
-    commonNamesList: _commonNamesList,
-    pickImageError: _pickImageError,
-    retrieveDataError: error,
-  );
-  }
-
-  Future<void> retrieveLostData() async {
-    final LostDataResponse response = await _picker.retrieveLostData();
-    if (response.isEmpty) {
-      return;
+  Widget _buildPreviewWidget() {
+    final String? error = _retrieveDataError;
+    if (error != null) {
+      _retrieveDataError = null;
     }
-    if (response.file != null) {
-      setState(() {
-        _imageFile = response.file!;
-      });
-    } else {
-      _retrieveDataError = response.exception!.code;
-    }
+
+    return PreviewImages(
+      imageFile: _imageFile,
+      scientificNameWithoutAuthor: _scientificName,
+      scientificNameAuthorship: _authorship,
+      commonNamesList: _commonNamesList,
+      pickImageError: _pickImageError,
+      isCameraSupported: _picker.supportsImageSource(ImageSource.camera),
+    );
   }
 
   void _recognizeImage() async {
     if (_imageFile == null) {
       return;
     }
+    setState(() => isPending = true);
 
     try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse(_plantNetUrl),
-      );
-      request.fields['organs'] = 'auto';
-      final imageField = await http.MultipartFile.fromPath(
-        'images',
+      final recognitionModel = await _recognitionService.recognize(
         _imageFile!.path,
       );
-      request.files.add(imageField);
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> jsonData = jsonDecode(response.body);
-        final recognitionModel = RecognitionModel.fromJson(jsonData);
-        if (recognitionModel.results != null &&
-            recognitionModel.results!.isNotEmpty) {
-          final firstResult = recognitionModel.results![0];
-          setState(() {
-            _scientificNameWithoutAuthor =
-                firstResult.species?.scientificNameWithoutAuthor;
-            _scientificNameAuthorship =
-                firstResult.species?.scientificNameAuthorship;
-            _commonNamesList.clear();
-            if (firstResult.species?.commonNames != null) {
-              _commonNamesList.addAll(firstResult.species!.commonNames!);
-            }
-          });
-        }
-      } else {
-        if (mounted) {
-          StyledSnackBar.show(
-            context,
-            'Unbekannte Spezies.',
-            type: SnackBarType.error,
-          );
-        }
-        debugPrint(
-          'Diese Spezies konnte nicht gefunden werden: ${response.statusCode}',
+      if (recognitionModel.results != null &&
+          recognitionModel.results!.isNotEmpty) {
+        final firstResult = recognitionModel.results![0];
+        setState(() {
+          _scientificName = firstResult.species?.scientificNameWithoutAuthor;
+          _authorship = firstResult.species?.scientificNameAuthorship;
+          _commonNamesList.clear();
+          if (firstResult.species?.commonNames != null) {
+            _commonNamesList.addAll(firstResult.species!.commonNames!);
+          }
+        });
+      }
+    } on HttpException catch (_) {
+      if (mounted) {
+        StyledSnackBar.show(
+          context,
+          'Diese Spezies kann nicht bestimmt werden.',
+          type: SnackBarType.error,
         );
       }
     } catch (error) {
       if (mounted) {
         StyledSnackBar.show(
           context,
-          'Anfrage fehlgeschlagen, prüfe deine Internetverbindung!',
+          'Anfrage fehlgeschlagen. Prüfe die Internetverbindung.',
           type: SnackBarType.error,
         );
       }
-      debugPrint('Request failed: $error');
+    } finally {
+      setState(() => isPending = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.title!)),
-      body: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-          ? FutureBuilder<void>(
-              future: retrieveLostData(),
-              builder: (BuildContext context, AsyncSnapshot<void> snapshot) {
-                switch (snapshot.connectionState) {
-                  case ConnectionState.none:
-                  case ConnectionState.waiting:
-                    return const Text(
-                      'You have not yet picked an image.',
-                      textAlign: TextAlign.center,
-                    );
-                  case ConnectionState.done:
-                    return _buildPreviewWidget();
-                  case ConnectionState.active:
-                    if (snapshot.hasError) {
-                      return Text(
-                        'Pick image error: ${snapshot.error}}',
-                        textAlign: TextAlign.center,
-                      );
-                    } else {
-                      return const Text(
-                        'You have not yet picked an image.',
-                        textAlign: TextAlign.center,
-                      );
-                    }
-                }
+    final bool isCameraSupported = _picker.supportsImageSource(
+      ImageSource.camera,
+    );
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: Color(0xffeaeaea),
+          appBar: AppBar(
+            title: Text(widget.title!),
+            backgroundColor: Color(0xffeaeaea),
+          ),
+          body: _buildPreviewWidget(),
+          floatingActionButton: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: <Widget>[
+              if (_imageFile == null)
+                buildImageSourceButtons(context, isCameraSupported),
+              if (_imageFile != null) buildImageProcessingButtons(),
+              SizedBox(height: 30),
+            ],
+          ),
+        ),
+        if (isPending)
+          Positioned.fill(
+            child: Container(
+              color: Color(0x8A000000),
+              child: Center(
+                child: const SizedBox(
+                  width: 70,
+                  height: 70,
+                  child: CircularProgressIndicator(color: Color(0xffd1d98d)),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Padding buildImageSourceButtons(
+    BuildContext context,
+    bool isCameraSupported,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 24.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          CustomFab(
+            icon: Icon(Icons.photo, size: 50),
+            description: 'Bild auswählen',
+            onPressed: () {
+              _onImageButtonPressed(ImageSource.gallery, context: context);
+            },
+          ),
+          if (_imageFile == null && isCameraSupported)
+            CustomFab(
+              icon: Icon(Icons.camera_alt, size: 50),
+              description: 'Foto machen',
+              onPressed: () {
+                _onImageButtonPressed(ImageSource.camera, context: context);
               },
-            )
-          : _buildPreviewWidget(),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: <Widget>[
-          if (_imageFile != null)
-            Column(
-              children: [
-                Semantics(
-                  label: 'clear_picked_image',
-                  child: FloatingActionButton(
-                    onPressed: () {
-                      setState(() {
-                        _imageFile = null;
-                        _commonNamesList.clear();
-                        _scientificNameWithoutAuthor = null;
-                      });
-                    },
-                    child: const Icon(Icons.clear),
-                  ),
-                ),
-                SizedBox(height: 16),
-                Semantics(
-                  label: 'picked_image_recognition',
-                  child: FloatingActionButton(
-                    onPressed: _recognizeImage,
-                    child: const Icon(Icons.send),
-                  ),
-                ),
-              ],
             ),
-          if (_imageFile == null)
-            Semantics(
-              label: 'image_picker_example_from_gallery',
-              child: FloatingActionButton(
-                onPressed: () {
-                  _onImageButtonPressed(ImageSource.gallery, context: context);
-                },
-                heroTag: 'image0',
-                tooltip: 'Pick image from gallery',
-                child: const Icon(Icons.photo),
-              ),
-            ),
-          if (_imageFile == null &&
-              _picker.supportsImageSource(ImageSource.camera))
-            Padding(
-              padding: const EdgeInsets.only(top: 16.0),
-              child: FloatingActionButton(
-                onPressed: () {
-                  _onImageButtonPressed(ImageSource.camera, context: context);
-                },
-                heroTag: 'image2',
-                tooltip: 'Take a photo',
-                child: const Icon(Icons.camera_alt),
-              ),
-            ),
+        ],
+      ),
+    );
+  }
+
+  Padding buildImageProcessingButtons() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 24.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          CustomFab(
+            icon: Icon(Icons.clear, size: 50),
+            description: 'nächstePflanze',
+            onPressed: () {
+              setState(() {
+                _imageFile = null;
+                _commonNamesList.clear();
+                _scientificName = null;
+              });
+            },
+          ),
+          CustomFab(
+            icon: Icon(Icons.send, size: 50),
+            description: 'Pflanze bestimmen',
+            onPressed: _recognizeImage,
+          ),
         ],
       ),
     );
