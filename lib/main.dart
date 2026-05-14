@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:green_stuff/plant_recognition.service.dart';
 import 'package:green_stuff/widgets/custom_fab.dart';
-import 'package:green_stuff/widgets/preview_images.dart';
+import 'package:green_stuff/widgets/preview_image.dart';
 import 'package:green_stuff/widgets/styled_snack_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -42,6 +42,7 @@ class _ImageSelectPageState extends State<ImageSelectPage> {
   String? _scientificName;
   String? _authorship;
   final List<String?> _commonNamesList = [];
+  int? _remainingIdentificationRequests;
 
   dynamic _pickImageError;
   String? _retrieveDataError;
@@ -72,11 +73,12 @@ class _ImageSelectPageState extends State<ImageSelectPage> {
       _retrieveDataError = null;
     }
 
-    return PreviewImages(
+    return PreviewImage(
       imageFile: _imageFile,
       scientificNameWithoutAuthor: _scientificName,
       scientificNameAuthorship: _authorship,
       commonNamesList: _commonNamesList,
+      remainingIdentificationRequests: _remainingIdentificationRequests,
       pickImageError: _pickImageError,
       isCameraSupported: _picker.supportsImageSource(ImageSource.camera),
     );
@@ -103,6 +105,8 @@ class _ImageSelectPageState extends State<ImageSelectPage> {
           if (firstResult.species?.commonNames != null) {
             _commonNamesList.addAll(firstResult.species!.commonNames!);
           }
+          _remainingIdentificationRequests =
+              recognitionModel.remainingIdentificationRequests;
         });
       }
     } on HttpException catch (_) {
@@ -180,6 +184,7 @@ class _ImageSelectPageState extends State<ImageSelectPage> {
           CustomFab(
             icon: Icon(Icons.photo, size: 50),
             description: 'Bild auswählen',
+            heroTag: 'gallery',
             onPressed: () {
               _onImageButtonPressed(ImageSource.gallery, context: context);
             },
@@ -188,6 +193,7 @@ class _ImageSelectPageState extends State<ImageSelectPage> {
             CustomFab(
               icon: Icon(Icons.camera_alt, size: 50),
               description: 'Foto machen',
+              heroTag: 'camera',
               onPressed: () {
                 _onImageButtonPressed(ImageSource.camera, context: context);
               },
@@ -207,6 +213,7 @@ class _ImageSelectPageState extends State<ImageSelectPage> {
           CustomFab(
             icon: Icon(Icons.clear, size: 50),
             description: 'nächstePflanze',
+            heroTag: 'clear',
             onPressed: () {
               setState(() {
                 _imageFile = null;
@@ -218,6 +225,7 @@ class _ImageSelectPageState extends State<ImageSelectPage> {
           CustomFab(
             icon: Icon(Icons.send, size: 50),
             description: 'Pflanze bestimmen',
+            heroTag: 'send',
             onPressed: _recognizeImage,
           ),
         ],

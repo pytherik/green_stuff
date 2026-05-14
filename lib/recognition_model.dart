@@ -1,7 +1,8 @@
 class RecognitionModel {
   List<Results>? results;
+  int? remainingIdentificationRequests;
 
-  RecognitionModel({this.results});
+  RecognitionModel({this.results, this.remainingIdentificationRequests});
 
   RecognitionModel.fromJson(dynamic json) {
     if (json['results'] != null) {
@@ -10,6 +11,7 @@ class RecognitionModel {
         results?.add(Results.fromJson(v));
       });
     }
+    remainingIdentificationRequests = json['remainingIdentificationRequests'];
   }
 
   Map<String, dynamic> toJson() {
@@ -17,6 +19,7 @@ class RecognitionModel {
     if (results != null) {
       map['results'] = results?.map((v) => v.toJson()).toList();
     }
+    map['remainingIdentificationRequests'] = remainingIdentificationRequests;
     return map;
   }
 }

@@ -2,20 +2,24 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-class PreviewImages extends StatelessWidget {
+import '../full_image_view.dart';
+
+class PreviewImage extends StatelessWidget {
   final XFile? imageFile;
   final String? scientificNameWithoutAuthor;
   final String? scientificNameAuthorship;
   final List<String?> commonNamesList;
+  final int? remainingIdentificationRequests;
   final dynamic pickImageError;
   final bool isCameraSupported;
 
-  const PreviewImages({
+  const PreviewImage({
     super.key,
     this.imageFile,
     this.scientificNameWithoutAuthor,
     this.scientificNameAuthorship,
     required this.commonNamesList,
+    required this.remainingIdentificationRequests,
     this.pickImageError,
     required this.isCameraSupported,
   });
@@ -29,26 +33,50 @@ class PreviewImages extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Image.file(
-                File(imageFile!.path),
-                width: double.infinity,
-                height: 200,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Text('Dieser Bildtyp wird nicht unterstützt.'),
+              GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => FullImageView(imageFile: imageFile),
+                    ),
                   );
                 },
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(24.0),
+                  ),
+                  child: Image.file(
+                    File(imageFile!.path),
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Text('Dieser Bildtyp wird nicht unterstützt.'),
+                      );
+                    },
+                  ),
+                ),
               ),
               if (scientificNameWithoutAuthor != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Column(
+                  padding: const EdgeInsets.only(top: 8.0, right: 8),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(scientificNameWithoutAuthor!),
-                      if (scientificNameAuthorship != null)
-                        Text('($scientificNameAuthorship)'),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(scientificNameWithoutAuthor!),
+                          if (scientificNameAuthorship != null)
+                            Text('($scientificNameAuthorship)'),
+                        ],
+                      ),
+                      if (remainingIdentificationRequests != null)
+                        Text('noch $remainingIdentificationRequests/500'),
                     ],
                   ),
                 ),
